@@ -11,7 +11,7 @@ Vault Unsealer takes a `.json` configuration file with the following configurati
 - `log_level` _(type: string, required: false)_ - This sets the servers log level output. Supported values are `trace`, `debug`, `info`, `warn`, and `err`. The default log level is `info`.
 - `probe_interval` _(type: int, required: true)_ - This specifies the frequency of the Vault seal status probe check in seconds.
 - `nodes` _(type: []string, required: true)_ - This is a list of Vault server nodes that Vault Unsealer will manage the seal status of.
-- `unseal_keys` _(type: []string, required: true)_ - A list of Vault unseal keys that can be used to unseal Vault
+- `unseal_keys` _(type: []string, required: true)_ - A list of Vault unseal keys that can be used to unseal Vault. The number of keys in this list should be equal to or greater than the unseal threshold required for your Vault cluster.
 
 **Example Configuration**
 
@@ -116,3 +116,6 @@ EOH
 }
 ```
 
+# Best Practice Tip
+
+Vault unsealer requires unseal keys which are highly sensitive pieces of data. It is recommended that the config file is rendered with the unseal keys values coming from an encrypted store that you trust. The Nomad job usage above is an example of how to achieve this.

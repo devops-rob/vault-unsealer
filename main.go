@@ -1,15 +1,52 @@
 package main
 
 import (
-	logger "github.com/sirupsen/logrus"
+	"context"
 	"strings"
+
+	logger "github.com/sirupsen/logrus"
 )
 
 func main() {
+	cfg, err := newConfig()
+	if err != nil {
+		logger.Fatal(err)
+	}
 
-	cfg := newConfig()
+	setLogLevel(cfg.LogLevel)
+	logger.SetFormatter(&logger.JSONFormatter{
+		PrettyPrint: true,
+	})
 
-	switch strings.ToLower(cfg.LogLevel) {
+	// Reduce the risk of unseal keys leaking to disk before we ever fetch them.
+	disableCoreDumps()
+	if cfg.DisableMlock {
+		logger.Warn("memory locking disabled by config (disable_mlock = true); ensure swap is disabled or encrypted")
+	} else {
+		lockMemory()
+	}
+
+	provider, err := newKeyProviders(cfg.KeySources)
+	if err != nil {
+		logger.Fatal(err)
+	}
+
+	tlsCfg := TLSConfig{}
+	if cfg.TLS != nil {
+		tlsCfg = *cfg.TLS
+	}
+	client, err := newVaultClient(tlsCfg)
+	if err != nil {
+		logger.Fatal(err)
+	}
+
+	logger.Debug("Vault Unsealer starting...")
+
+	monitorAndUnsealVaults(context.Background(), client, cfg.Nodes, provider, cfg.ProbeInterval)
+}
+
+func setLogLevel(level string) {
+	switch strings.ToLower(level) {
 	case "info":
 		logger.SetLevel(logger.InfoLevel)
 	case "warn":
@@ -26,20 +63,5 @@ func main() {
 		logger.SetLevel(logger.DebugLevel)
 	default:
 		logger.SetLevel(logger.InfoLevel)
-
 	}
-
-	logger.SetFormatter(&logger.JSONFormatter{
-		PrettyPrint: true,
-	})
-
-	logger.Info()
-	if cfg.UnsealKeys == nil {
-		logger.Fatal("unseal keys not specified")
-	}
-
-	logger.Debug("Vault Unsealer starting...")
-
-	monitorAndUnsealVaults(cfg.Nodes, cfg.UnsealKeys, cfg.ProbeInterval, cfg.LogLevel)
-
 }

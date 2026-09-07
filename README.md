@@ -41,9 +41,9 @@ If you *can* use a stronger option, prefer it:
 
 ## Configuration
 
-Vault Unsealer takes a `.json` configuration file. The configuration file
-contains **no secrets** — only where to reach Vault and where to source keys
-from.
+Vault Unsealer takes an [HCL](https://github.com/hashicorp/hcl) configuration
+file (default `config.hcl`). The configuration file contains **no secrets** —
+only where to reach Vault and where to source keys from.
 
 | Field | Type | Required | Description |
 | --- | --- | --- | --- |
@@ -65,15 +65,17 @@ Best when the surrounding platform already injects secrets as environment
 variables (Nomad template with `env = true`, systemd `LoadCredential`,
 `op run`, Kubernetes secrets, ...).
 
-```json
-{
-  "probe_interval": 10,
-  "nodes": ["https://10.0.0.11:8200", "https://10.0.0.12:8200"],
-  "tls": { "ca_cert": "/etc/vault-unsealer/ca.pem" },
-  "unseal_key_source": {
-    "type": "env",
-    "env_vars": ["VAULT_UNSEAL_KEY_1", "VAULT_UNSEAL_KEY_2", "VAULT_UNSEAL_KEY_3"]
-  }
+```hcl
+probe_interval = 10
+nodes          = ["https://10.0.0.11:8200", "https://10.0.0.12:8200"]
+
+tls {
+  ca_cert = "/etc/vault-unsealer/ca.pem"
+}
+
+unseal_key_source {
+  type     = "env"
+  env_vars = ["VAULT_UNSEAL_KEY_1", "VAULT_UNSEAL_KEY_2", "VAULT_UNSEAL_KEY_3"]
 }
 ```
 
@@ -84,16 +86,18 @@ stdout. This is the universal adapter: integrate any secret store without Vault
 Unsealer depending on a vendor SDK. See [`examples/fetch-keys.sh`](examples/fetch-keys.sh)
 for 1Password, Nomad Variables, Vault KV, and SOPS recipes.
 
-```json
-{
-  "probe_interval": 10,
-  "nodes": ["https://10.0.0.11:8200"],
-  "tls": { "ca_cert": "/etc/vault-unsealer/ca.pem" },
-  "unseal_key_source": {
-    "type": "exec",
-    "command": ["/etc/vault-unsealer/fetch-keys.sh"],
-    "timeout_seconds": 30
-  }
+```hcl
+probe_interval = 10
+nodes          = ["https://10.0.0.11:8200"]
+
+tls {
+  ca_cert = "/etc/vault-unsealer/ca.pem"
+}
+
+unseal_key_source {
+  type            = "exec"
+  command         = ["/etc/vault-unsealer/fetch-keys.sh"]
+  timeout_seconds = 30
 }
 ```
 
@@ -112,7 +116,7 @@ sops -d --extract '["unseal_keys"]' keys.enc.json | jq -r '.[]'
 
 ## Usage
 
-Vault Unsealer looks for a file named `config.json` in the current directory by
+Vault Unsealer looks for a file named `config.hcl` in the current directory by
 default. Override with `-config-file-path <dir>` and `-config-file <name>`.
 
 ### Docker
@@ -122,7 +126,7 @@ environment variables (the `env` source):
 
 ```shell
 docker run --rm \
-  -v $(pwd)/config.json:/config.json:ro \
+  -v $(pwd)/config.hcl:/config.hcl:ro \
   -e VAULT_UNSEAL_KEY_1 -e VAULT_UNSEAL_KEY_2 -e VAULT_UNSEAL_KEY_3 \
   devopsrob/vault-unsealer:0.3 -config-file-path /
 ```
@@ -153,28 +157,28 @@ job "vault-unsealer" {
         image   = "devopsrob/vault-unsealer:0.3"
         command = "-config-file-path"
         args    = ["/local"]
-        volumes = ["local/config.json:/local/config.json"]
+        volumes = ["local/config.hcl:/local/config.hcl"]
       }
 
       template {
-        destination = "local/config.json"
+        destination = "local/config.hcl"
         change_mode = "restart"
         data        = <<EOH
-{
-  "log_level": "info",
-  "probe_interval": 10,
-  "nodes": [
+log_level      = "info"
+probe_interval = 10
+nodes = [
 {{- $nodes := nomadService "vault" }}
 {{- range $i, $e := $nodes }}
-    {{- if $i }},{{ end }}
-    "https://{{ .Address }}:{{ .Port }}"
+  {{- if $i }},{{ end }}
+  "https://{{ .Address }}:{{ .Port }}"
 {{- end }}
-  ],
-  "tls": { "ca_cert": "/local/ca.pem" },
-  "unseal_key_source": {
-    "type": "env",
-    "env_vars": ["VAULT_UNSEAL_KEY_1", "VAULT_UNSEAL_KEY_2", "VAULT_UNSEAL_KEY_3"]
-  }
+]
+tls {
+  ca_cert = "/local/ca.pem"
+}
+unseal_key_source {
+  type     = "env"
+  env_vars = ["VAULT_UNSEAL_KEY_1", "VAULT_UNSEAL_KEY_2", "VAULT_UNSEAL_KEY_3"]
 }
 EOH
       }

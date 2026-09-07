@@ -5,9 +5,10 @@ Operating guidance for AI agents working on `vault-unsealer`.
 ## What this is
 
 A small Go daemon that periodically probes HashiCorp Vault nodes and unseals any
-that are sealed, aimed at self-hosted Vault **Community Edition**. Unseal keys are
-sensitive: they are sourced at runtime from an external provider (`env` or
-`exec`) and must never be written to disk or committed to the repo.
+that are sealed, aimed at self-hosted Vault **Community Edition**. Configuration
+is HCL (`config.hcl`). Unseal keys are sensitive: they are sourced at runtime
+from an external provider (`env` or `exec`) and must never be written to disk or
+committed to the repo.
 
 ## Build & checks
 
@@ -41,7 +42,7 @@ out, do BOTH of the following before considering a change complete:
      "subjectAltName=IP:127.0.0.1"`).
    - `vault operator init -key-shares=3 -key-threshold=2 -format=json` and keep
      the returned keys out of any committed file.
-   - Write a `config.json` (no secrets) pointing at the node with
+   - Write a `config.hcl` (no secrets) pointing at the node with
      `tls.ca_cert` set, and an `unseal_key_source` of `env` and/or `exec`.
    - Run the built binary and confirm the node goes `Sealed true -> false`.
    - Also confirm auto-recovery: `vault operator seal` (root token) and verify
@@ -55,7 +56,7 @@ they can be inspected and left running for the user.
 
 ## Conventions
 
-- Never put unseal keys, tokens, or other secrets in `config.json`, committed
+- Never put unseal keys, tokens, or other secrets in `config.hcl`, committed
   files, logs, or test fixtures. The config file is secret-free by design.
 - Keep HTTPS certificate verification on by default; `tls.skip_verify` is a
   local-testing escape hatch only.

@@ -34,6 +34,28 @@ used otherwise. `tls.skip_verify` exists for local testing only and logs a
 warning when enabled. Every request is bounded by a timeout so a hung node
 cannot stall the probe loop.
 
+### HTTP vs HTTPS
+
+Vault Unsealer is **not** HTTPS-only. The scheme is whatever you put in `nodes`:
+an `http://` node is contacted over plain HTTP (the `tls` block is ignored for
+it), and an `https://` node is contacted over verified TLS. You can even mix
+schemes across nodes.
+
+!!! danger "Plain HTTP transmits unseal keys in cleartext"
+    To unseal, the tool **POSTs unseal keys in the request body** to
+    `/v1/sys/unseal`. Over `http://` those keys cross the network unencrypted, so
+    anyone able to observe the traffic (a switch, router, or compromised host on
+    the path) can capture a threshold of shares and unseal Vault themselves.
+
+Guidance:
+
+- **`http://`** — only over a fully trusted link, e.g. loopback or an unsealer
+  co-located on the same host as the Vault node.
+- **`https://`** — anything crossing a network you do not fully control. For a
+  self-signed or private CA, set `tls.ca_cert` to that CA rather than reaching
+  for `tls.skip_verify` (which disables verification and re-opens a
+  man-in-the-middle hole).
+
 ## Protecting keys in memory
 
 While Vault Unsealer holds unseal keys (only during an unseal attempt), those

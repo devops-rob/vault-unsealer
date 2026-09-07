@@ -13,11 +13,11 @@ import (
 // resolved at runtime from an external source (see KeySourceConfig) so that
 // secrets never live in the configuration file.
 type Config struct {
-	LogLevel      string           `hcl:"log_level,optional"`
-	Nodes         []string         `hcl:"nodes"`
-	ProbeInterval int              `hcl:"probe_interval,optional"`
-	TLS           *TLSConfig       `hcl:"tls,block"`
-	KeySource     *KeySourceConfig `hcl:"unseal_key_source,block"`
+	LogLevel      string            `hcl:"log_level,optional"`
+	Nodes         []string          `hcl:"nodes"`
+	ProbeInterval int               `hcl:"probe_interval,optional"`
+	TLS           *TLSConfig        `hcl:"tls,block"`
+	KeySources    []KeySourceConfig `hcl:"unseal_key_source,block"`
 }
 
 // TLSConfig controls how vault-unsealer connects to Vault's HTTPS API.
@@ -83,9 +83,9 @@ func (c *Config) validate() error {
 	if c.ProbeInterval <= 0 {
 		return fmt.Errorf(`config: "probe_interval" must be greater than 0`)
 	}
-	if c.KeySource == nil {
-		return fmt.Errorf(`config: an "unseal_key_source" block is required`)
+	if len(c.KeySources) == 0 {
+		return fmt.Errorf(`config: at least one "unseal_key_source" block is required`)
 	}
-	// The unseal_key_source contents are fully validated when the provider is built.
+	// The unseal_key_source contents are fully validated when the providers are built.
 	return nil
 }

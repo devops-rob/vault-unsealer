@@ -8,6 +8,8 @@ import (
 	"os/exec"
 	"strings"
 	"time"
+
+	logger "github.com/sirupsen/logrus"
 )
 
 // KeyProvider retrieves Vault unseal keys from an external source at runtime.
@@ -88,6 +90,89 @@ func parseKeys(out string) []string {
 		}
 	}
 	return keys
+}
+
+// multiKeyProvider aggregates unseal keys from several underlying providers. It
+// lets keys genuinely live in different places (e.g. one env-injected share plus
+// two shares fetched by different commands) and combines them so the unseal loop
+// can keep submitting keys until Vault reports quorum.
+//
+// It is deliberately tolerant at fetch time: if one source fails (a command
+// errors, a secret is temporarily unavailable, ...) the others are still used.
+// It only errors when NO source yields any key. Structural misconfiguration is
+// caught earlier, when the providers are built.
+type multiKeyProvider struct {
+	providers []labeledProvider
+}
+
+type labeledProvider struct {
+	label    string
+	provider KeyProvider
+}
+
+func (m *multiKeyProvider) UnsealKeys(ctx context.Context) ([]string, error) {
+	var all []string
+	seen := make(map[string]struct{})
+
+	for _, lp := range m.providers {
+		keys, err := lp.provider.UnsealKeys(ctx)
+		if err != nil {
+			logger.Warnf("unseal key source %s failed, continuing with other sources: %v", lp.label, err)
+			continue
+		}
+		added := 0
+		for _, k := range keys {
+			if _, dup := seen[k]; dup {
+				continue
+			}
+			seen[k] = struct{}{}
+			all = append(all, k)
+			added++
+		}
+		logger.Debugf("unseal key source %s provided %d key(s) (%d new)", lp.label, len(keys), added)
+	}
+
+	if len(all) == 0 {
+		return nil, fmt.Errorf("no unseal keys could be retrieved from any of the %d configured sources", len(m.providers))
+	}
+	return all, nil
+}
+
+// newKeyProviders builds a KeyProvider from one or more source configurations.
+// Every source is validated up front; a structural error in any source is fatal
+// so misconfiguration is caught at startup rather than during an outage.
+func newKeyProviders(cfgs []KeySourceConfig) (KeyProvider, error) {
+	if len(cfgs) == 0 {
+		return nil, fmt.Errorf("at least one unseal_key_source is required")
+	}
+	providers := make([]labeledProvider, 0, len(cfgs))
+	for i, cfg := range cfgs {
+		p, err := newKeyProvider(cfg)
+		if err != nil {
+			return nil, fmt.Errorf("unseal_key_source #%d: %w", i+1, err)
+		}
+		providers = append(providers, labeledProvider{label: keySourceLabel(i, cfg), provider: p})
+	}
+	if len(providers) == 1 {
+		// A single source needs no aggregation wrapper.
+		return providers[0].provider, nil
+	}
+	return &multiKeyProvider{providers: providers}, nil
+}
+
+// keySourceLabel builds a short, non-secret label for logging.
+func keySourceLabel(index int, cfg KeySourceConfig) string {
+	switch strings.ToLower(strings.TrimSpace(cfg.Type)) {
+	case "exec":
+		if len(cfg.Command) > 0 {
+			return fmt.Sprintf("#%d exec[%s]", index+1, cfg.Command[0])
+		}
+		return fmt.Sprintf("#%d exec", index+1)
+	case "env":
+		return fmt.Sprintf("#%d env%v", index+1, cfg.EnvVars)
+	default:
+		return fmt.Sprintf("#%d %s", index+1, cfg.Type)
+	}
 }
 
 const defaultExecTimeout = 30 * time.Second

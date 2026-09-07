@@ -45,9 +45,44 @@ unseal_key_source {
 	if cfg.TLS == nil || cfg.TLS.CACert != "/etc/vault-unsealer/ca.pem" || cfg.TLS.SkipVerify {
 		t.Fatalf("tls = %+v", cfg.TLS)
 	}
-	if cfg.KeySource == nil || cfg.KeySource.Type != "env" ||
-		!reflect.DeepEqual(cfg.KeySource.EnvVars, []string{"K1", "K2", "K3"}) {
-		t.Fatalf("key source = %+v", cfg.KeySource)
+	if len(cfg.KeySources) != 1 || cfg.KeySources[0].Type != "env" ||
+		!reflect.DeepEqual(cfg.KeySources[0].EnvVars, []string{"K1", "K2", "K3"}) {
+		t.Fatalf("key sources = %+v", cfg.KeySources)
+	}
+}
+
+func TestLoadConfigMultipleSources(t *testing.T) {
+	path := writeConfig(t, `
+nodes = ["https://10.0.0.1:8200"]
+
+unseal_key_source {
+  type     = "env"
+  env_vars = ["VAULT_UNSEAL_KEY_1"]
+}
+
+unseal_key_source {
+  type    = "exec"
+  command = ["/opt/fetch-1password.sh"]
+}
+
+unseal_key_source {
+  type    = "exec"
+  command = ["/opt/fetch-nomad.sh"]
+}
+`)
+	cfg, err := loadConfig(path)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if len(cfg.KeySources) != 3 {
+		t.Fatalf("expected 3 key sources, got %d", len(cfg.KeySources))
+	}
+	if cfg.KeySources[0].Type != "env" || cfg.KeySources[1].Type != "exec" || cfg.KeySources[2].Type != "exec" {
+		t.Fatalf("unexpected source types: %+v", cfg.KeySources)
+	}
+	// The parsed sources should build a working aggregate provider.
+	if _, err := newKeyProviders(cfg.KeySources); err != nil {
+		t.Fatalf("newKeyProviders: %v", err)
 	}
 }
 
@@ -75,14 +110,14 @@ unseal_key_source {
 	if cfg.TLS != nil {
 		t.Fatalf("tls = %+v, want nil", cfg.TLS)
 	}
-	if cfg.KeySource == nil || cfg.KeySource.Type != "exec" ||
-		!reflect.DeepEqual(cfg.KeySource.Command, []string{"/usr/local/bin/fetch-keys.sh"}) {
-		t.Fatalf("key source = %+v", cfg.KeySource)
+	if len(cfg.KeySources) != 1 || cfg.KeySources[0].Type != "exec" ||
+		!reflect.DeepEqual(cfg.KeySources[0].Command, []string{"/usr/local/bin/fetch-keys.sh"}) {
+		t.Fatalf("key sources = %+v", cfg.KeySources)
 	}
 
 	// The parsed config should build a working provider.
-	if _, err := newKeyProvider(*cfg.KeySource); err != nil {
-		t.Fatalf("newKeyProvider: %v", err)
+	if _, err := newKeyProviders(cfg.KeySources); err != nil {
+		t.Fatalf("newKeyProviders: %v", err)
 	}
 }
 

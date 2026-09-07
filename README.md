@@ -59,6 +59,9 @@ only where to reach Vault and where to source keys from.
 
 ### Key sources
 
+The `unseal_key_source` block may be repeated to combine shares from several
+places (see [Multiple key sources](#multiple-key-sources-split-custody-quorum)).
+
 #### `env` — keys injected as environment variables
 
 Best when the surrounding platform already injects secrets as environment
@@ -113,6 +116,51 @@ nomad var get -item=key1 nomad/jobs/vault-unsealer
 # SOPS-encrypted file
 sops -d --extract '["unseal_keys"]' keys.enc.json | jq -r '.[]'
 ```
+
+#### Multiple key sources (split-custody quorum)
+
+You can declare **more than one** `unseal_key_source` block. This is useful when
+the key shares genuinely live in different places — for example one share
+injected as an environment variable, another in 1Password, and another in Nomad
+Variables. Vault Unsealer gathers keys from **all** configured sources and keeps
+submitting them until Vault reports it is unsealed (quorum met).
+
+```hcl
+nodes = ["https://10.0.0.11:8200"]
+
+tls {
+  ca_cert = "/etc/vault-unsealer/ca.pem"
+}
+
+# Share 1: injected into the environment by the platform.
+unseal_key_source {
+  type     = "env"
+  env_vars = ["VAULT_UNSEAL_KEY_1"]
+}
+
+# Share 2: fetched from 1Password.
+unseal_key_source {
+  type    = "exec"
+  command = ["/etc/vault-unsealer/fetch-1password.sh"]
+}
+
+# Share 3: fetched from Nomad Variables.
+unseal_key_source {
+  type    = "exec"
+  command = ["/etc/vault-unsealer/fetch-nomad.sh"]
+}
+```
+
+Behavior:
+
+- **Fail-fast on misconfiguration:** a structurally invalid block (unknown
+  `type`, `exec` with no `command`, `env` with no `env_vars`) is rejected at
+  startup.
+- **Tolerant at runtime:** if one source is temporarily unavailable (a command
+  errors, a secret can't be read), it is logged and skipped, and the remaining
+  sources are still used. Only if *no* source yields any key does the probe fail
+  and retry on the next interval.
+- Duplicate keys returned by multiple sources are de-duplicated.
 
 ## Usage
 

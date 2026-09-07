@@ -18,7 +18,7 @@ func main() {
 		PrettyPrint: true,
 	})
 
-	provider, err := newKeyProvider(*cfg.KeySource)
+	provider, err := newKeyProviders(cfg.KeySources)
 	if err != nil {
 		logger.Fatal(err)
 	}

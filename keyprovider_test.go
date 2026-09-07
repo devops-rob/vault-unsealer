@@ -2,11 +2,14 @@ package main
 
 import (
 	"context"
+	"errors"
 	"reflect"
 	"runtime"
 	"testing"
 	"time"
 )
+
+var errBoom = errors.New("boom")
 
 func TestParseKeys(t *testing.T) {
 	got := parseKeys("  key1 \n\nkey2\n   \nkey3\n")
@@ -101,6 +104,87 @@ func TestNewKeyProvider(t *testing.T) {
 				t.Fatalf("provider type = %T, want %T", p, tc.wantT)
 			}
 		})
+	}
+}
+
+// stubProvider is a KeyProvider used to exercise aggregation behavior.
+type stubProvider struct {
+	keys []string
+	err  error
+}
+
+func (s *stubProvider) UnsealKeys(context.Context) ([]string, error) { return s.keys, s.err }
+
+func TestMultiKeyProviderAggregatesAndDedupes(t *testing.T) {
+	m := &multiKeyProvider{providers: []labeledProvider{
+		{label: "a", provider: &stubProvider{keys: []string{"k1", "k2"}}},
+		{label: "b", provider: &stubProvider{keys: []string{"k2", "k3"}}}, // k2 duplicate
+		{label: "c", provider: &stubProvider{keys: []string{"k4"}}},
+	}}
+	keys, err := m.UnsealKeys(context.Background())
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	want := []string{"k1", "k2", "k3", "k4"}
+	if !reflect.DeepEqual(keys, want) {
+		t.Fatalf("UnsealKeys = %v, want %v", keys, want)
+	}
+}
+
+func TestMultiKeyProviderToleratesFailingSource(t *testing.T) {
+	m := &multiKeyProvider{providers: []labeledProvider{
+		{label: "broken", provider: &stubProvider{err: errBoom}},
+		{label: "ok", provider: &stubProvider{keys: []string{"k1", "k2"}}},
+	}}
+	keys, err := m.UnsealKeys(context.Background())
+	if err != nil {
+		t.Fatalf("expected failing source to be tolerated, got error: %v", err)
+	}
+	if !reflect.DeepEqual(keys, []string{"k1", "k2"}) {
+		t.Fatalf("UnsealKeys = %v, want [k1 k2]", keys)
+	}
+}
+
+func TestMultiKeyProviderAllSourcesFail(t *testing.T) {
+	m := &multiKeyProvider{providers: []labeledProvider{
+		{label: "a", provider: &stubProvider{err: errBoom}},
+		{label: "b", provider: &stubProvider{err: errBoom}},
+	}}
+	if _, err := m.UnsealKeys(context.Background()); err == nil {
+		t.Fatal("expected error when all sources fail, got nil")
+	}
+}
+
+func TestNewKeyProvidersSingleUnwrapped(t *testing.T) {
+	p, err := newKeyProviders([]KeySourceConfig{{Type: "env", EnvVars: []string{"A"}}})
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if _, ok := p.(*envKeyProvider); !ok {
+		t.Fatalf("single source should not be wrapped, got %T", p)
+	}
+}
+
+func TestNewKeyProvidersMultiWrapped(t *testing.T) {
+	p, err := newKeyProviders([]KeySourceConfig{
+		{Type: "env", EnvVars: []string{"A"}},
+		{Type: "exec", Command: []string{"echo", "x"}},
+	})
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if _, ok := p.(*multiKeyProvider); !ok {
+		t.Fatalf("multiple sources should be aggregated, got %T", p)
+	}
+}
+
+func TestNewKeyProvidersFailFastOnBadSource(t *testing.T) {
+	_, err := newKeyProviders([]KeySourceConfig{
+		{Type: "env", EnvVars: []string{"A"}},
+		{Type: "exec"}, // missing command -> structural error
+	})
+	if err == nil {
+		t.Fatal("expected structural error for misconfigured source, got nil")
 	}
 }
 

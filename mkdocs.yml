@@ -1,0 +1,56 @@
+site_name: Vault Unsealer
+site_description: Auto-unsealing for self-hosted HashiCorp Vault (Community Edition)
+site_url: https://devops-rob.github.io/vault-unsealer/
+repo_url: https://github.com/devops-rob/vault-unsealer
+repo_name: devops-rob/vault-unsealer
+edit_uri: edit/main/docs/
+copyright: Licensed under the Apache License 2.0
+
+theme:
+  name: material
+  icon:
+    logo: material/lock-open-variant
+    repo: fontawesome/brands/github
+  palette:
+    - media: "(prefers-color-scheme: light)"
+      scheme: default
+      primary: black
+      accent: amber
+      toggle:
+        icon: material/weather-night
+        name: Switch to dark mode
+    - media: "(prefers-color-scheme: dark)"
+      scheme: slate
+      primary: black
+      accent: amber
+      toggle:
+        icon: material/weather-sunny
+        name: Switch to light mode
+  features:
+    - navigation.instant
+    - navigation.sections
+    - navigation.top
+    - navigation.tracking
+    - content.code.copy
+    - content.action.edit
+    - toc.follow
+
+markdown_extensions:
+  - admonition
+  - attr_list
+  - tables
+  - toc:
+      permalink: true
+  - pymdownx.details
+  - pymdownx.highlight:
+      anchor_linenums: true
+  - pymdownx.superfences
+  - pymdownx.inlinehilite
+  - pymdownx.tabbed:
+      alternate_style: true
+
+nav:
+  - Home: index.md
+  - Configuration: configuration.md
+  - Security: security.md
+  - Releasing: releasing.md

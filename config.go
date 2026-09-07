@@ -2,51 +2,89 @@ package main
 
 import (
 	"flag"
-	logger "github.com/sirupsen/logrus"
-	"github.com/spf13/viper"
+	"fmt"
 	"strings"
+
+	"github.com/spf13/viper"
 )
 
+// Config is the non-secret runtime configuration for vault-unsealer. Note that
+// unseal keys are intentionally NOT part of this struct: they are resolved at
+// runtime from an external source (see KeySourceConfig) so that secrets never
+// live in the configuration file.
 type Config struct {
-	LogLevel      string   `json:"log_level"`
-	Nodes         []string `json:"nodes"`
-	ProbeInterval int      `json:"probe_interval"`
-	UnsealKeys    []string `json:"unseal_keys"`
+	LogLevel      string          `mapstructure:"log_level"`
+	Nodes         []string        `mapstructure:"nodes"`
+	ProbeInterval int             `mapstructure:"probe_interval"`
+	TLS           TLSConfig       `mapstructure:"tls"`
+	KeySource     KeySourceConfig `mapstructure:"unseal_key_source"`
 }
 
-var configFilePath = flag.String("config-file-path", ".", "The path where config.json file to use with vault-unsealer is located")
-var configFile = flag.String("config-file", "config", "The path where config.json file to use with vault-unsealer is located")
+// TLSConfig controls how vault-unsealer connects to Vault's HTTPS API.
+type TLSConfig struct {
+	// CACert is the path to a PEM bundle used to verify the Vault server
+	// certificate. When empty, the system trust store is used.
+	CACert string `mapstructure:"ca_cert"`
+	// SkipVerify disables TLS certificate verification. This is insecure and
+	// should only ever be used for local testing.
+	SkipVerify bool `mapstructure:"skip_verify"`
+}
 
-func newConfig() *Config {
+// KeySourceConfig selects where unseal keys are fetched from at runtime.
+type KeySourceConfig struct {
+	// Type is the provider type: "env" or "exec".
+	Type string `mapstructure:"type"`
+	// EnvVars is the list of environment variable names to read (type=env),
+	// one unseal key per variable.
+	EnvVars []string `mapstructure:"env_vars"`
+	// Command is the argv of the command to run (type=exec); each non-empty
+	// line of stdout is treated as an unseal key.
+	Command []string `mapstructure:"command"`
+	// TimeoutSeconds bounds how long an exec key source may run. Defaults to 30s.
+	TimeoutSeconds int `mapstructure:"timeout_seconds"`
+}
 
+var (
+	configFilePath = flag.String("config-file-path", ".", "Directory containing the vault-unsealer config file")
+	configFile     = flag.String("config-file", "config", "Config file name (without the .json extension)")
+)
+
+func newConfig() (*Config, error) {
 	flag.Parse()
 
-	conf := strings.TrimSuffix(*configFile, ".json")
+	name := strings.TrimSuffix(*configFile, ".json")
 
-	config := viper.New()
-	replacer := strings.NewReplacer(".", "_")
-	config.SetEnvKeyReplacer(replacer)
-	config.AutomaticEnv()
+	v := viper.New()
+	v.SetDefault("log_level", "info")
+	v.SetDefault("probe_interval", 10)
 
-	config.SetDefault("log.level", "info")
-	config.SetDefault("nodes", []string{"http://localhost:8200"})
-	config.SetDefault("unseal_threshold", 1)
-	config.SetDefault("probe_interval", 10)
-	config.SetDefault("unseal_keys", nil)
+	v.SetConfigName(name)
+	v.SetConfigType("json")
+	v.AddConfigPath(*configFilePath)
+	v.AddConfigPath("config")
 
-	config.AddConfigPath("config")
-	config.SetConfigName(conf)   // Register config file name (no extension)
-	config.SetConfigType("json") // Look for specific type
-	config.AddConfigPath(*configFilePath)
-	err := config.ReadInConfig()
-	if err != nil {
-		logger.Fatal(err)
+	if err := v.ReadInConfig(); err != nil {
+		return nil, fmt.Errorf("reading config: %w", err)
 	}
 
-	return &Config{
-		LogLevel:      config.GetString("log_level"),
-		Nodes:         config.GetStringSlice("nodes"),
-		ProbeInterval: config.GetInt("probe_interval"),
-		UnsealKeys:    config.GetStringSlice("unseal_keys"),
+	var cfg Config
+	if err := v.Unmarshal(&cfg); err != nil {
+		return nil, fmt.Errorf("parsing config: %w", err)
 	}
+
+	if err := cfg.validate(); err != nil {
+		return nil, err
+	}
+	return &cfg, nil
+}
+
+func (c *Config) validate() error {
+	if len(c.Nodes) == 0 {
+		return fmt.Errorf("config: \"nodes\" must contain at least one Vault address")
+	}
+	if c.ProbeInterval <= 0 {
+		return fmt.Errorf("config: \"probe_interval\" must be greater than 0")
+	}
+	// The unseal_key_source is fully validated when the provider is built.
+	return nil
 }

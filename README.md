@@ -300,8 +300,43 @@ EOH
 Requires Go 1.27+.
 
 ```shell
-make build      # build the vault-unsealer binary
-make test       # run unit tests
-make vet        # go vet
-make vulncheck  # govulncheck vulnerability scan
+make build         # build the vault-unsealer binary
+make test          # run unit tests
+make vet           # go vet
+make vulncheck     # govulncheck vulnerability scan
+make release-check # validate the GoReleaser config
+make snapshot      # build a local release (binaries + archives) without publishing
 ```
+
+Continuous integration (`.github/workflows/ci.yml`) runs vet, build, tests, and
+`govulncheck` on every push and pull request to `main`.
+
+## Releasing
+
+Releases are automated with [GoReleaser](https://goreleaser.com) and GitHub
+Actions (`.github/workflows/release.yml`), triggered by pushing a semver tag:
+
+```shell
+git tag v0.4.0
+git push origin v0.4.0
+```
+
+On that tag the workflow runs the test suite and then:
+
+- builds `linux`/`darwin` binaries for `amd64`/`arm64`, packages them as
+  `.tar.gz` archives with `checksums.txt`, and publishes a GitHub Release with an
+  auto-generated changelog;
+- builds and pushes a multi-arch (`linux/amd64,linux/arm64`) container image,
+  tagged with the full version, `major.minor`, and `latest`.
+
+### Container registries and secrets
+
+- **GHCR** (`ghcr.io/<owner>/vault-unsealer`) is always published using the
+  built-in `GITHUB_TOKEN` — no setup required.
+- **Docker Hub** (`docker.io/devopsrob/vault-unsealer`) is published only when
+  the following repository secrets are configured (otherwise it is skipped):
+  - `DOCKERHUB_USERNAME`
+  - `DOCKERHUB_TOKEN` (a Docker Hub access token)
+
+Preview the whole build locally without publishing anything with `make snapshot`
+(artifacts land in `dist/`).

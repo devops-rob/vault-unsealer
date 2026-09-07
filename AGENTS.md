@@ -23,6 +23,10 @@ make vulncheck  # govulncheck ./...
 
 If `govulncheck` picks the wrong toolchain, pin it: `GOTOOLCHAIN=go1.27.1 make vulncheck`.
 
+Releases are tag-driven via GoReleaser + GitHub Actions (`.github/workflows/release.yml`).
+Validate release changes locally with `make release-check` and `make snapshot`
+(never hand-edit release artifacts). CI runs on push/PR via `.github/workflows/ci.yml`.
+
 ## Testing requirements (default for every change)
 
 Unless the change is trivial (docs, comments, string literals) or the user opts

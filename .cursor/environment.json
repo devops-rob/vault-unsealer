@@ -1,0 +1,4 @@
+{
+  "name": "vault-unsealer",
+  "install": "./.cursor/install.sh"
+}

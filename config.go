@@ -16,8 +16,13 @@ type Config struct {
 	LogLevel      string            `hcl:"log_level,optional"`
 	Nodes         []string          `hcl:"nodes"`
 	ProbeInterval int               `hcl:"probe_interval,optional"`
-	TLS           *TLSConfig        `hcl:"tls,block"`
-	KeySources    []KeySourceConfig `hcl:"unseal_key_source,block"`
+	// DisableMlock skips locking the process's memory into RAM. Locking is on by
+	// default to keep unseal keys out of swap; set this to true only when the
+	// deployment cannot grant CAP_IPC_LOCK and relies on disabled/encrypted swap
+	// instead.
+	DisableMlock bool              `hcl:"disable_mlock,optional"`
+	TLS          *TLSConfig        `hcl:"tls,block"`
+	KeySources   []KeySourceConfig `hcl:"unseal_key_source,block"`
 }
 
 // TLSConfig controls how vault-unsealer connects to Vault's HTTPS API.

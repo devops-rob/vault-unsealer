@@ -18,6 +18,14 @@ func main() {
 		PrettyPrint: true,
 	})
 
+	// Reduce the risk of unseal keys leaking to disk before we ever fetch them.
+	disableCoreDumps()
+	if cfg.DisableMlock {
+		logger.Warn("memory locking disabled by config (disable_mlock = true); ensure swap is disabled or encrypted")
+	} else {
+		lockMemory()
+	}
+
 	provider, err := newKeyProviders(cfg.KeySources)
 	if err != nil {
 		logger.Fatal(err)

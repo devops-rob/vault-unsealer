@@ -39,6 +39,39 @@ If you *can* use a stronger option, prefer it:
 > **NOTE: This is a workflow Proof of Concept. Evaluate the security trade-off
 > above carefully before any production use.**
 
+### Protecting keys in memory
+
+While Vault Unsealer holds unseal keys (only during an unseal attempt), those
+bytes could otherwise be written to disk via swap or a crash core dump. Two
+layers guard against that:
+
+**Built in (automatic):**
+
+- **Memory locking (`mlock`).** On Linux the process locks its pages into RAM
+  (`mlockall`) so keys cannot be paged out to swap. This needs the `IPC_LOCK`
+  capability (or root) and a sufficient `RLIMIT_MEMLOCK`. If it can't (missing
+  capability), the tool logs a warning and continues — set `disable_mlock = true`
+  to skip the attempt and silence the warning when you mitigate swap another way.
+- **No core dumps.** Core dumps are disabled at startup (`RLIMIT_CORE=0` and
+  `PR_SET_DUMPABLE=0`), which also blocks unprivileged `ptrace` reads of the
+  process memory.
+
+To grant the capability:
+
+```shell
+# Docker
+docker run --cap-add IPC_LOCK --ulimit memlock=-1 ... devopsrob/vault-unsealer:0.3
+
+# Nomad task config: cap_add = ["IPC_LOCK"]
+```
+
+**Host hardening (recommended, and what HashiCorp advise for Vault too):**
+
+- **Disable swap** on the unsealer host (`swapoff -a`), or use **encrypted swap**
+  (e.g. dm-crypt with a random key) so anything paged out is encrypted at rest.
+- Note: `mlock` prevents swapping but does not protect against a root attacker,
+  `/proc/<pid>/mem`, or a live debugger. Treat the unsealer host as sensitive.
+
 ## Configuration
 
 Vault Unsealer takes an [HCL](https://github.com/hashicorp/hcl) configuration
@@ -49,6 +82,7 @@ only where to reach Vault and where to source keys from.
 | --- | --- | --- | --- |
 | `log_level` | string | no | Log level: `trace`, `debug`, `info`, `warn`, `error`, `fatal`, `panic`. Default `info`. |
 | `probe_interval` | int | no | Seal-status probe frequency, in seconds. Default `10`. |
+| `disable_mlock` | bool | no | Skip locking process memory into RAM. Locking is on by default to keep keys out of swap; see [Protecting keys in memory](#protecting-keys-in-memory). Default `false`. |
 | `nodes` | []string | yes | Vault node addresses to manage. Use `https://` in production. |
 | `tls.ca_cert` | string | no | Path to a PEM CA bundle used to verify Vault's TLS certificate. Defaults to the system trust store. |
 | `tls.skip_verify` | bool | no | Disable TLS verification. **Insecure**; local testing only. Default `false`. |
@@ -174,10 +208,15 @@ environment variables (the `env` source):
 
 ```shell
 docker run --rm \
+  --cap-add IPC_LOCK --ulimit memlock=-1 \
   -v $(pwd)/config.hcl:/config.hcl:ro \
   -e VAULT_UNSEAL_KEY_1 -e VAULT_UNSEAL_KEY_2 -e VAULT_UNSEAL_KEY_3 \
   devopsrob/vault-unsealer:0.3 -config-file-path /
 ```
+
+`--cap-add IPC_LOCK --ulimit memlock=-1` lets the container lock keys out of
+swap (see [Protecting keys in memory](#protecting-keys-in-memory)); omit them
+only if you set `disable_mlock = true`.
 
 > The `exec` source requires the referenced binaries (e.g. `op`, `nomad`) to be
 > present in the runtime image or host. In containers the `env` source is usually
@@ -206,6 +245,7 @@ job "vault-unsealer" {
         command = "-config-file-path"
         args    = ["/local"]
         volumes = ["local/config.hcl:/local/config.hcl"]
+        cap_add = ["IPC_LOCK"] # lock unseal keys out of swap
       }
 
       template {

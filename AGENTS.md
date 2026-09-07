@@ -60,4 +60,7 @@ they can be inspected and left running for the user.
   files, logs, or test fixtures. The config file is secret-free by design.
 - Keep HTTPS certificate verification on by default; `tls.skip_verify` is a
   local-testing escape hatch only.
+- Keep the in-process memory hardening intact: `mlock` (unless `disable_mlock`)
+  and disabled core dumps keep unseal keys out of swap and core files. This is
+  Linux-specific (`harden_linux.go`); keep the non-Linux stub building.
 - The `.gitignore`d compiled `vault-unsealer` binary must not be committed.

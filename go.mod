@@ -5,20 +5,19 @@ go 1.27.0
 toolchain go1.27.1
 
 require (
+	github.com/hashicorp/hcl/v2 v2.24.0
 	github.com/sirupsen/logrus v1.10.2
-	github.com/spf13/viper v1.21.0
 )
 
 require (
-	github.com/fsnotify/fsnotify v1.10.1 // indirect
-	github.com/go-viper/mapstructure/v2 v2.5.0 // indirect
-	github.com/pelletier/go-toml/v2 v2.4.3 // indirect
-	github.com/sagikazarmark/locafero v0.12.0 // indirect
-	github.com/spf13/afero v1.15.0 // indirect
-	github.com/spf13/cast v1.10.0 // indirect
-	github.com/spf13/pflag v1.0.10 // indirect
-	github.com/subosito/gotenv v1.6.0 // indirect
-	go.yaml.in/yaml/v3 v3.0.5 // indirect
+	github.com/agext/levenshtein v1.2.1 // indirect
+	github.com/apparentlymart/go-textseg/v15 v15.0.0 // indirect
+	github.com/google/go-cmp v0.6.0 // indirect
+	github.com/mitchellh/go-wordwrap v1.0.1 // indirect
+	github.com/zclconf/go-cty v1.16.3 // indirect
+	golang.org/x/mod v0.38.0 // indirect
+	golang.org/x/sync v0.22.0 // indirect
 	golang.org/x/sys v0.47.0 // indirect
 	golang.org/x/text v0.41.0 // indirect
+	golang.org/x/tools v0.48.0 // indirect
 )

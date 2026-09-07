@@ -18,12 +18,16 @@ func main() {
 		PrettyPrint: true,
 	})
 
-	provider, err := newKeyProvider(cfg.KeySource)
+	provider, err := newKeyProvider(*cfg.KeySource)
 	if err != nil {
 		logger.Fatal(err)
 	}
 
-	client, err := newVaultClient(cfg.TLS)
+	tlsCfg := TLSConfig{}
+	if cfg.TLS != nil {
+		tlsCfg = *cfg.TLS
+	}
+	client, err := newVaultClient(tlsCfg)
 	if err != nil {
 		logger.Fatal(err)
 	}

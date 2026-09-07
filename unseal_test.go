@@ -34,15 +34,17 @@ func TestNewVaultClientMissingCACert(t *testing.T) {
 }
 
 func TestConfigValidate(t *testing.T) {
+	ks := &KeySourceConfig{Type: "env", EnvVars: []string{"A"}}
 	tests := []struct {
 		name    string
 		cfg     Config
 		wantErr bool
 	}{
-		{name: "ok", cfg: Config{Nodes: []string{"https://127.0.0.1:8200"}, ProbeInterval: 5}},
-		{name: "no nodes", cfg: Config{ProbeInterval: 5}, wantErr: true},
-		{name: "zero interval", cfg: Config{Nodes: []string{"https://127.0.0.1:8200"}}, wantErr: true},
-		{name: "negative interval", cfg: Config{Nodes: []string{"https://x"}, ProbeInterval: -1}, wantErr: true},
+		{name: "ok", cfg: Config{Nodes: []string{"https://127.0.0.1:8200"}, ProbeInterval: 5, KeySource: ks}},
+		{name: "no nodes", cfg: Config{ProbeInterval: 5, KeySource: ks}, wantErr: true},
+		{name: "zero interval", cfg: Config{Nodes: []string{"https://127.0.0.1:8200"}, KeySource: ks}, wantErr: true},
+		{name: "negative interval", cfg: Config{Nodes: []string{"https://x"}, ProbeInterval: -1, KeySource: ks}, wantErr: true},
+		{name: "missing key source", cfg: Config{Nodes: []string{"https://x"}, ProbeInterval: 5}, wantErr: true},
 	}
 	for _, tc := range tests {
 		t.Run(tc.name, func(t *testing.T) {

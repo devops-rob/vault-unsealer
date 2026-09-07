@@ -340,3 +340,37 @@ On that tag the workflow runs the test suite and then:
 
 Preview the whole build locally without publishing anything with `make snapshot`
 (artifacts land in `dist/`).
+
+### Supply-chain security
+
+Every release ships verifiable provenance:
+
+- **SBOMs** — an SPDX SBOM is generated per archive, and the container image
+  carries SBOM + max-mode provenance attestations.
+- **Signatures** — `checksums.txt` and the container image are signed with
+  [cosign](https://docs.sigstore.dev/) using keyless (Sigstore/OIDC) signing —
+  no long-lived keys.
+
+Verify a downloaded release:
+
+```shell
+cosign verify-blob \
+  --certificate checksums.txt.pem \
+  --signature checksums.txt.sig \
+  --certificate-identity-regexp '^https://github.com/devops-rob/vault-unsealer' \
+  --certificate-oidc-issuer https://token.actions.githubusercontent.com \
+  checksums.txt
+```
+
+Verify the image:
+
+```shell
+cosign verify \
+  --certificate-identity-regexp '^https://github.com/devops-rob/vault-unsealer' \
+  --certificate-oidc-issuer https://token.actions.githubusercontent.com \
+  ghcr.io/devops-rob/vault-unsealer:<tag>
+```
+
+## License
+
+Licensed under the [Apache License 2.0](LICENSE).

@@ -3,6 +3,9 @@ name: Release
 on:
   push:
     tags:
+      # Start at v0.4.0 or later. Do NOT reuse v0.1.x–v0.3.x: those image tags
+      # (0.1/0.2/0.3) already exist on Docker Hub from the original PoC, and the
+      # major.minor tag would overwrite them with the breaking HCL-config build.
       - "v*"
 
 permissions:

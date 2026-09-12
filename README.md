@@ -8,6 +8,12 @@ is sealed, submits unseal keys until the node is unsealed again. It is aimed at
 in a cloud) and HSM/PKCS#11 auto-unseal (Vault Enterprise + an HSM) are not
 realistic options.
 
+> **Upgrading from the 0.x proof of concept** (Docker Hub `0.1`–`0.3`)? `v0.4.0`
+> is a breaking change: configuration is now **HCL** (not JSON), and unseal keys
+> move out of the config file into one or more [`unseal_key_source`](#key-sources)
+> blocks. The old `0.1`–`0.3` images are untouched; new releases publish `0.4.x`
+> and `latest` to both Docker Hub and GHCR. See [Releasing](#releasing).
+
 ## Security model — read this first
 
 Auto-unsealing an on-prem Vault Community cluster fundamentally requires
@@ -60,7 +66,7 @@ To grant the capability:
 
 ```shell
 # Docker
-docker run --cap-add IPC_LOCK --ulimit memlock=-1 ... devopsrob/vault-unsealer:0.3
+docker run --cap-add IPC_LOCK --ulimit memlock=-1 ... devopsrob/vault-unsealer:0.4
 
 # Nomad task config: cap_add = ["IPC_LOCK"]
 ```
@@ -211,7 +217,7 @@ docker run --rm \
   --cap-add IPC_LOCK --ulimit memlock=-1 \
   -v $(pwd)/config.hcl:/config.hcl:ro \
   -e VAULT_UNSEAL_KEY_1 -e VAULT_UNSEAL_KEY_2 -e VAULT_UNSEAL_KEY_3 \
-  devopsrob/vault-unsealer:0.3 -config-file-path /
+  devopsrob/vault-unsealer:0.4 -config-file-path /
 ```
 
 `--cap-add IPC_LOCK --ulimit memlock=-1` lets the container lock keys out of
@@ -241,7 +247,7 @@ job "vault-unsealer" {
       driver = "docker"
 
       config {
-        image   = "devopsrob/vault-unsealer:0.3"
+        image   = "devopsrob/vault-unsealer:0.4"
         command = "-config-file-path"
         args    = ["/local"]
         volumes = ["local/config.hcl:/local/config.hcl"]

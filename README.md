@@ -8,6 +8,12 @@ is sealed, submits unseal keys until the node is unsealed again. It is aimed at
 in a cloud) and HSM/PKCS#11 auto-unseal (Vault Enterprise + an HSM) are not
 realistic options.
 
+> **Upgrading from the 0.x proof of concept** (Docker Hub `0.1`–`0.3`)? `v0.4.0`
+> is a breaking change: configuration is now **HCL** (not JSON), and unseal keys
+> move out of the config file into one or more [`unseal_key_source`](#key-sources)
+> blocks. The old `0.1`–`0.3` images are untouched; new releases publish `0.4.x`
+> and `latest` to both Docker Hub and GHCR. See [Releasing](#releasing).
+
 ## Security model — read this first
 
 Auto-unsealing an on-prem Vault Community cluster fundamentally requires
@@ -60,7 +66,7 @@ To grant the capability:
 
 ```shell
 # Docker
-docker run --cap-add IPC_LOCK --ulimit memlock=-1 ... devopsrob/vault-unsealer:0.3
+docker run --cap-add IPC_LOCK --ulimit memlock=-1 ... devopsrob/vault-unsealer:0.4
 
 # Nomad task config: cap_add = ["IPC_LOCK"]
 ```
@@ -211,7 +217,7 @@ docker run --rm \
   --cap-add IPC_LOCK --ulimit memlock=-1 \
   -v $(pwd)/config.hcl:/config.hcl:ro \
   -e VAULT_UNSEAL_KEY_1 -e VAULT_UNSEAL_KEY_2 -e VAULT_UNSEAL_KEY_3 \
-  devopsrob/vault-unsealer:0.3 -config-file-path /
+  devopsrob/vault-unsealer:0.4 -config-file-path /
 ```
 
 `--cap-add IPC_LOCK --ulimit memlock=-1` lets the container lock keys out of
@@ -241,7 +247,7 @@ job "vault-unsealer" {
       driver = "docker"
 
       config {
-        image   = "devopsrob/vault-unsealer:0.3"
+        image   = "devopsrob/vault-unsealer:0.4"
         command = "-config-file-path"
         args    = ["/local"]
         volumes = ["local/config.hcl:/local/config.hcl"]
@@ -300,8 +306,77 @@ EOH
 Requires Go 1.27+.
 
 ```shell
-make build      # build the vault-unsealer binary
-make test       # run unit tests
-make vet        # go vet
-make vulncheck  # govulncheck vulnerability scan
+make build         # build the vault-unsealer binary
+make test          # run unit tests
+make vet           # go vet
+make vulncheck     # govulncheck vulnerability scan
+make release-check # validate the GoReleaser config
+make snapshot      # build a local release (binaries + archives) without publishing
 ```
+
+Continuous integration (`.github/workflows/ci.yml`) runs vet, build, tests, and
+`govulncheck` on every push and pull request to `main`.
+
+## Releasing
+
+Releases are automated with [GoReleaser](https://goreleaser.com) and GitHub
+Actions (`.github/workflows/release.yml`), triggered by pushing a semver tag:
+
+```shell
+git tag v0.4.0
+git push origin v0.4.0
+```
+
+On that tag the workflow runs the test suite and then:
+
+- builds `linux`/`darwin` binaries for `amd64`/`arm64`, packages them as
+  `.tar.gz` archives with `checksums.txt`, and publishes a GitHub Release with an
+  auto-generated changelog;
+- builds and pushes a multi-arch (`linux/amd64,linux/arm64`) container image,
+  tagged with the full version, `major.minor`, and `latest`.
+
+### Container registries and secrets
+
+- **GHCR** (`ghcr.io/<owner>/vault-unsealer`) is always published using the
+  built-in `GITHUB_TOKEN` — no setup required.
+- **Docker Hub** (`docker.io/devopsrob/vault-unsealer`) is published only when
+  the following repository secrets are configured (otherwise it is skipped):
+  - `DOCKERHUB_USERNAME`
+  - `DOCKERHUB_TOKEN` (a Docker Hub access token)
+
+Preview the whole build locally without publishing anything with `make snapshot`
+(artifacts land in `dist/`).
+
+### Supply-chain security
+
+Every release ships verifiable provenance:
+
+- **SBOMs** — an SPDX SBOM is generated per archive, and the container image
+  carries SBOM + max-mode provenance attestations.
+- **Signatures** — `checksums.txt` and the container image are signed with
+  [cosign](https://docs.sigstore.dev/) using keyless (Sigstore/OIDC) signing —
+  no long-lived keys.
+
+Verify a downloaded release:
+
+```shell
+cosign verify-blob \
+  --certificate checksums.txt.pem \
+  --signature checksums.txt.sig \
+  --certificate-identity-regexp '^https://github.com/devops-rob/vault-unsealer' \
+  --certificate-oidc-issuer https://token.actions.githubusercontent.com \
+  checksums.txt
+```
+
+Verify the image:
+
+```shell
+cosign verify \
+  --certificate-identity-regexp '^https://github.com/devops-rob/vault-unsealer' \
+  --certificate-oidc-issuer https://token.actions.githubusercontent.com \
+  ghcr.io/devops-rob/vault-unsealer:<tag>
+```
+
+## License
+
+Licensed under the [Apache License 2.0](LICENSE).

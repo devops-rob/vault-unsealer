@@ -2,12 +2,29 @@ package main
 
 import (
 	"context"
+	"flag"
+	"fmt"
 	"strings"
 
 	logger "github.com/sirupsen/logrus"
 )
 
+// Build metadata, injected at release time via -ldflags -X.
+var (
+	version = "dev"
+	commit  = "none"
+	date    = "unknown"
+)
+
+var showVersion = flag.Bool("version", false, "Print version information and exit")
+
 func main() {
+	flag.Parse()
+	if *showVersion {
+		fmt.Printf("vault-unsealer %s (commit %s, built %s)\n", version, commit, date)
+		return
+	}
+
 	cfg, err := newConfig()
 	if err != nil {
 		logger.Fatal(err)
@@ -40,7 +57,7 @@ func main() {
 		logger.Fatal(err)
 	}
 
-	logger.Debug("Vault Unsealer starting...")
+	logger.Debugf("Vault Unsealer %s starting...", version)
 
 	monitorAndUnsealVaults(context.Background(), client, cfg.Nodes, provider, cfg.ProbeInterval)
 }

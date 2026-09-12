@@ -2,6 +2,8 @@
 
 A tool to implement auto-unsealing of HashiCorp Vault nodes.
 
+📖 **Documentation:** <https://devops-rob.github.io/vault-unsealer/>
+
 It periodically probes a list of Vault nodes and, whenever a node reports that it
 is sealed, submits unseal keys until the node is unsealed again. It is aimed at
 **self-hosted Vault Community Edition**, where cloud KMS auto-unseal (you are not
